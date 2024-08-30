@@ -100,6 +100,8 @@ Follow these steps to set up and deploy Karpenter:
    aws ssm get-parameter --name /aws/service/eks/optimized-ami/${K8S_VERSION}/amazon-linux-2/recommended/image_id --query Parameter.Value --output text
    ```
 
+4. Right now, this setup is for the Private EKS cluster. If your EKS Cluster is public, remove `f"--set settings.isolatedVPC=true "` from Step 9 in the karpenter-python-script.py file.
+
 ## Reference
 
 - [Karpenter Documentation](https://karpenter.sh/docs/getting-started/migrating-from-cas/).
