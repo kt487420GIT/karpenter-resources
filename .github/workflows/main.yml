@@ -1,0 +1,73 @@
+name: Run Karpenter Script
+
+on:
+  workflow_dispatch:
+    inputs:
+      script_name:
+        description: "Name of the script to run"
+        required: true
+        default: "karpenter-python-script.py"
+
+jobs:
+  run-script:
+    runs-on: [self-hosted, prod-runner]
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      KARPENTER_NAMESPACE: ${{vars.KARPENTER_NAMESPACE}}
+      CLUSTER_NAME: ${{vars.CLUSTER_NAME}}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      K8S_VERSION: ${{vars.K8S_VERSION}}
+      AMD_AMI_ID: ${{vars.AMD_AMI_ID}}
+      KARPENTER_VERSION: ${{vars.KARPENTER_VERSION}}
+      NODEGROUP_LABEL: ${{vars.NODEGROUP_LABEL}}
+    steps:
+      - name: Set permissions
+        run: sudo chmod -R 777 /home/ubuntu/actions-runner/_work/pb-api-nest
+
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.Karpenter_Role }}
+          role-session-name: GitHub-Action-Role
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          curl -LO "https://dl.k8s.io/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl.sha256"
+          echo "$(<kubectl.sha256) kubectl" | sha256sum --check
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+      - name: Install Helm
+        run: |
+          curl -LO "https://get.helm.sh/helm-v3.15.3-linux-amd64.tar.gz"
+          tar -zxvf helm-v3.15.3-linux-amd64.tar.gz
+          sudo mv linux-amd64/helm /usr/local/bin/helm
+          helm version
+
+      - name: Connect to EKS cluster
+        run: |
+          aws eks update-kubeconfig --name ${{vars.CLUSTER_NAME}} --region ${{ vars.AWS_REGION }}
+          cat $HOME/.kube/config
+          aws sts get-caller-identity
+
+      - name: Run Karpenter Python script
+        run: |
+          python3 ./${{ github.event.inputs.script_name }}
