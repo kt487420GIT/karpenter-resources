@@ -334,10 +334,10 @@ command = (
     f"--set \"settings.clusterName={CLUSTER_NAME}\" "
     f"--set settings.isolatedVPC=true "
     f"--set \"serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=arn:{AWS_PARTITION}:iam::{AWS_ACCOUNT_ID}:role/KarpenterControllerRole-{CLUSTER_NAME}\" "
-    f"--set controller.resources.requests.cpu=500m "
-    f"--set controller.resources.requests.memory=512Mi "
-    f"--set controller.resources.limits.cpu=500m "
-    f"--set controller.resources.limits.memory=512Mi "
+    f"--set controller.resources.requests.cpu=1 "
+    f"--set controller.resources.requests.memory=1Gi "
+    f"--set controller.resources.limits.cpu=1 "
+    f"--set controller.resources.limits.memory=1Gi "
     f"--wait > karpenter.yaml"
 )
 
@@ -350,7 +350,7 @@ def run_command(cmd):
 run_command(command)
 print("karpenter.yaml created successfully.")
 
-# Step 10: Modify karpenter.yaml for node affinity
+# Step 10: Modify karpenter.yaml for node affinity 
 def modify_karpenter_yaml(file_path, nodegroup):
     # Load all YAML documents from the file
     with open(file_path, 'r') as file:
@@ -410,9 +410,36 @@ def modify_karpenter_yaml(file_path, nodegroup):
 
     print(f"Modified {file_path} with node affinity rules.")
 
+# Update Karpenter Image in karpenter.yaml
+def update_karpenter_image(file_path, new_image):
+    # Load all YAML documents from the file
+    with open(file_path, 'r') as file:
+        documents = list(yaml.safe_load_all(file))
+
+    # Find and update the relevant document (e.g., Deployment)
+    for doc in documents:
+        if isinstance(doc, dict) and doc.get('kind') == 'Deployment':
+            if 'spec' in doc and 'template' in doc['spec']:
+                containers = doc['spec']['template']['spec'].get('containers', [])
+                for container in containers:
+                    if container.get('name') == 'karpenter':
+                        container['image'] = new_image
+                        print(f"Updated image to {new_image} in {file_path}")
+                        break
+
+    # Write all documents back to the file
+    with open(file_path, 'w') as file:
+        yaml.safe_dump_all(documents, file, default_flow_style=False)
+
+    print(f"Updated {file_path} with new image: {new_image}")
+
 # Example usage: modify the karpenter.yaml file
 kube_config_path = "karpenter.yaml"
+karpenter_image = os.environ.get("KARPENTER_IMAGE")
+
 modify_karpenter_yaml(kube_config_path, nodegroup)
+update_karpenter_image(kube_config_path, karpenter_image)
+
 
 # Step 11: Create namespace and NodePool CRD, and apply karpenter.yaml through local karpenter files
 KARPENTER_CRD_DIR = "karpenter/crds" 
@@ -455,9 +482,9 @@ spec:
         - key: karpenter.k8s.aws/instance-generation
           operator: Gt
           values: ["4"]
-        - key: karpenter.k8s.aws/instance-type
+        - key: node.kubernetes.io/instance-type
           operator: In
-          values: ["c5.large", "c5.xlarge", "c5.2xlarge", "c6g.large", "c6g.xlarge", "c6g.2xlarge", "c6i.large", "c6i.xlarge", "c6i.2xlarge", "c7g.large", "c7g.xlarge", "c7g.2xlarge", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge", "t4g.medium", "t4g.large", "t4g.xlarge", "t4g.2xlarge"]
+          values: ["c5.large", "c5.xlarge", "c5.2xlarge", "c6g.large", "c6g.xlarge", "c6g.2xlarge", "c7g.large", "c7g.xlarge", "c7g.2xlarge", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge", "t4g.medium", "t4g.large", "t4g.xlarge", "t4g.2xlarge"]
         - key: capacity-spread
           operator: In
           values:
@@ -496,9 +523,9 @@ spec:
         - key: karpenter.k8s.aws/instance-generation
           operator: Gt
           values: ["4"]
-        - key: karpenter.k8s.aws/instance-type
+        - key: node.kubernetes.io/instance-type
           operator: In
-          values: ["c5.large", "c5.xlarge", "c5.2xlarge", "c6g.large", "c6g.xlarge", "c6g.2xlarge", "c6i.large", "c6i.xlarge", "c6i.2xlarge", "c7g.large", "c7g.xlarge", "c7g.2xlarge", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge", "t4g.medium", "t4g.large", "t4g.xlarge", "t4g.2xlarge"]
+          values: ["c5.large", "c5.xlarge", "c5.2xlarge", "c6g.large", "c6g.xlarge", "c6g.2xlarge", "c7g.large", "c7g.xlarge", "c7g.2xlarge", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge", "t4g.medium", "t4g.large", "t4g.xlarge", "t4g.2xlarge"]
         - key: capacity-spread
           operator: In
           values:
