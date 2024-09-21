@@ -12,6 +12,7 @@ Before you begin, ensure that you have the following prerequisites installed and
   EKS clusters, IAM roles, and other resources.
 - GitHub Actions Runner: Configured with the necessary permissions to run workflows on your repository.
 - EKS Cluster: An existing EKS cluster where Karpenter will be deployed.
+- Karpenter Image: This image contains the Karpenter binaries(version 1.0.1) and is used to deploy the Karpenter controller in your EKS cluster.
 
 ## Steps to Set Up
 
@@ -29,6 +30,7 @@ Follow these steps to set up and deploy Karpenter:
    - KARPENTER_NAMESPACE: The Kubernetes namespace where Karpenter is installed. This namespace is where Karpenter's resources and controllers will be deployed.
    - KARPENTER_VERSION: The version of Karpenter that you are deploying. This version should match the one compatible with your Kubernetes cluster and configuration.
    - NODEGROUP_LABEL: The label assigned to the nodes managed by Karpenter, often used for identifying or grouping nodes within the cluster.
+   - KARPENTER_IMAGE: The Amazon ECR image for Karpenter. Ensure this setup is for Karpenter version 1.0.1.
 
 3. Configure the GitHub Workflow
    The repository contains a GitHub Actions workflow (.github/workflows/main.yml) that automates the deployment of Karpenter.
