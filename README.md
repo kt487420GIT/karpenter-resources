@@ -82,7 +82,7 @@ Follow these steps to set up and deploy Karpenter:
 
 1. The karpenter script includes a NodePool configuration to ensure that only instances with up to 8 CPUs are used. You can customize this configuration as needed in the NodePool manifest.
 
-2. Deployment file musht have a topologySpreadConstraints field:
+2. Deployment file must have a topologySpreadConstraints field:
 
    ```
    topologySpreadConstraints:
