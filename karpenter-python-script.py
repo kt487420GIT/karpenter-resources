@@ -445,13 +445,27 @@ update_karpenter_image(kube_config_path, karpenter_image)
 KARPENTER_CRD_DIR = "karpenter/crds" 
 
 # Apply CRDs from the local directory
+
+# Create CRD for karpenter.sh_nodepools.yaml
 try:
     run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodepools.yaml\"")
-    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.k8s.aws_ec2nodeclasses.yaml\"")
-    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodeclaims.yaml\"")
-    print("CRDs created successfully.")
+    print("CRD karpenter.sh_nodepools.yaml created successfully.")
 except Exception as e:
-    print(f"Error applying CRDs: {str(e)}")
+    print(f"Error applying CRD karpenter.sh_nodepools.yaml: {str(e)}")
+
+# Create CRD for karpenter.k8s.aws_ec2nodeclasses.yaml
+try:
+    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.k8s.aws_ec2nodeclasses.yaml\"")
+    print("CRD karpenter.k8s.aws_ec2nodeclasses.yaml created successfully.")
+except Exception as e:
+    print(f"Error applying CRD karpenter.k8s.aws_ec2nodeclasses.yaml: {str(e)}")
+
+# Create CRD for karpenter.sh_nodeclaims.yaml
+try:
+    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodeclaims.yaml\"")
+    print("CRD karpenter.sh_nodeclaims.yaml created successfully.")
+except Exception as e:
+    print(f"Error applying CRD karpenter.sh_nodeclaims.yaml: {str(e)}")
 
 # Apply the Karpenter configuration
 run_command("cat karpenter.yaml")
