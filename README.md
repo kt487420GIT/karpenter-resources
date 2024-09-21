@@ -17,7 +17,7 @@ Before you begin, ensure that you have the following prerequisites installed and
 
 Follow these steps to set up and deploy Karpenter:
 
-1. Create a role with Github repo trust relationships. You can refer role/github-access-policy and role/trust-relationships code(don't forgot to update placeholders).
+1. Create a role with GitHub repo trust relationships. You can refer role/github-access-policy and role/trust-relationships code(don't forget to update placeholders).
 
 2. Update GitHub repository secrets and variables:
 
@@ -94,7 +94,7 @@ Follow these steps to set up and deploy Karpenter:
              app: <app_name>
    ```
 
-3. I am using this AMD AMI: "ami-02bb8bd60dfa800ef" you can also get the latest AMI by running the below command:
+3. I am using this AMD AMI: "ami-02bb8bd60dfa800ef" You can also get the latest AMI by running the below command:
 
    ```
    aws ssm get-parameter --name /aws/service/eks/optimized-ami/${K8S_VERSION}/amazon-linux-2/recommended/image_id --query Parameter.Value --output text
