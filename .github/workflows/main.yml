@@ -26,7 +26,7 @@ jobs:
       KARPENTER_IMAGE: ${{vars.KARPENTER_IMAGE}}
     steps:
       - name: Set permissions
-        run: sudo chmod -R 777 /home/ubuntu/actions-runner/_work/pb-api-nest
+        run: sudo chmod -R 777 /home/ubuntu/actions-runner/_work/karpenter
 
       - name: Checkout Repository
         uses: actions/checkout@v2
