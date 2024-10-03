@@ -214,13 +214,24 @@ iam_client.put_role_policy(
     PolicyDocument=json.dumps(controller_policy)
 )
 
-# Step 6: Add tags to subnets and security groups
-nodegroups = run_command(f"aws eks list-nodegroups --cluster-name {CLUSTER_NAME} --query 'nodegroups' --output text").split()
+# # Step 6a: Select NG, get subnetes automatically and add tags to subnetes 
+# nodegroups = run_command(f"aws eks list-nodegroups --cluster-name {CLUSTER_NAME} --query 'nodegroups' --output text").split()
 
-for nodegroup in nodegroups:
-    subnets = run_command(f"aws eks describe-nodegroup --cluster-name {CLUSTER_NAME} --nodegroup-name {nodegroup} --query 'nodegroup.subnets' --output text").split()
-    for subnet in subnets:
-        run_command(f"aws ec2 create-tags --tags 'Key=karpenter.sh/discovery,Value={CLUSTER_NAME}' --resources {subnet}")
+# for nodegroup in nodegroups:
+#     subnets = run_command(f"aws eks describe-nodegroup --cluster-name {CLUSTER_NAME} --nodegroup-name {nodegroup} --query 'nodegroup.subnets' --output text").split()
+#     for subnet in subnets:
+#         run_command(f"aws ec2 create-tags --tags 'Key=karpenter.sh/discovery,Value={CLUSTER_NAME}' --resources {subnet}")
+
+# Step 6b: Define your subnets manually (list of subnet IDs)
+subnets = [
+    "subnet-0632df4f63bd04b34",
+    "subnet-01abf3394bd1d80a8",
+    "subnet-09344001e5499b75e"
+]
+
+# Loop through each subnet and add the necessary tags
+for subnet in subnets:
+    run_command(f"aws ec2 create-tags --tags 'Key=karpenter.sh/discovery,Value={CLUSTER_NAME}' --resources {subnet}")
 
 # Step 7: Tag security groups
 
@@ -306,22 +317,37 @@ run_command(f"kubectl get configmap aws-auth -n {KARPENTER_NAMESPACE} -o yaml > 
 with open("/tmp/aws-auth.yaml", "r") as f:
     config = yaml.safe_load(f)
 
-# Ensure mapRoles is in the config and append the new entry
+# Check if the new entry is already in mapRoles
+updated = False
 if "data" in config and "mapRoles" in config["data"]:
     map_roles = yaml.safe_load(config["data"]["mapRoles"])
-    map_roles.append(new_entry)
-    config["data"]["mapRoles"] = yaml.dump(map_roles, default_flow_style=False)
+    
+    # Check if the new role already exists
+    for role in map_roles:
+        if role["rolearn"] == new_entry["rolearn"]:
+            print(f"Role {new_entry['rolearn']} already updated.")
+            updated = True
+            break
+
+    # If not updated, append the new entry
+    if not updated:
+        map_roles.append(new_entry)
+        config["data"]["mapRoles"] = yaml.dump(map_roles, default_flow_style=False)
+        print("New entry added to aws-auth ConfigMap.")
+
 else:
     raise Exception("mapRoles section not found in aws-auth ConfigMap.")
 
-# Write the updated ConfigMap to a temporary file
-with open("/tmp/aws-auth-updated.yaml", "w") as f:
-    yaml.dump(config, f, default_flow_style=False)
+# If it was updated, apply the changes
+if not updated:
+    # Write the updated ConfigMap to a temporary file
+    with open("/tmp/aws-auth-updated.yaml", "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
 
-# Apply the updated ConfigMap
-run_command(f"kubectl apply -f /tmp/aws-auth-updated.yaml")
+    # Apply the updated ConfigMap
+    run_command(f"kubectl apply -f /tmp/aws-auth-updated.yaml")
 
-print("aws-auth ConfigMap updated successfully.")
+    print("aws-auth ConfigMap updated successfully.")
 
 # Step 9: Install the Karpenter through local Helm chart
 
@@ -422,7 +448,7 @@ def update_karpenter_image(file_path, new_image):
             if 'spec' in doc and 'template' in doc['spec']:
                 containers = doc['spec']['template']['spec'].get('containers', [])
                 for container in containers:
-                    if container.get('name') == 'karpenter':
+                    if container.get('name') == 'controller':
                         container['image'] = new_image
                         print(f"Updated image to {new_image} in {file_path}")
                         break
@@ -445,15 +471,30 @@ update_karpenter_image(kube_config_path, karpenter_image)
 KARPENTER_CRD_DIR = "karpenter/crds" 
 
 # Apply CRDs from the local directory
+
+# Create CRD for karpenter.sh_nodepools.yaml
 try:
     run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodepools.yaml\"")
-    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.k8s.aws_ec2nodeclasses.yaml\"")
-    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodeclaims.yaml\"")
-    print("CRDs created successfully.")
+    print("CRD karpenter.sh_nodepools.yaml created successfully.")
 except Exception as e:
-    print(f"Error applying CRDs: {str(e)}")
+    print(f"Error applying CRD karpenter.sh_nodepools.yaml: {str(e)}")
+
+# Create CRD for karpenter.k8s.aws_ec2nodeclasses.yaml
+try:
+    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.k8s.aws_ec2nodeclasses.yaml\"")
+    print("CRD karpenter.k8s.aws_ec2nodeclasses.yaml created successfully.")
+except Exception as e:
+    print(f"Error applying CRD karpenter.k8s.aws_ec2nodeclasses.yaml: {str(e)}")
+
+# Create CRD for karpenter.sh_nodeclaims.yaml
+try:
+    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodeclaims.yaml\"")
+    print("CRD karpenter.sh_nodeclaims.yaml created successfully.")
+except Exception as e:
+    print(f"Error applying CRD karpenter.sh_nodeclaims.yaml: {str(e)}")
 
 # Apply the Karpenter configuration
+run_command("cat karpenter.yaml")
 run_command("kubectl apply -f karpenter.yaml")
 print("Karpenter deployed")
 
@@ -476,6 +517,10 @@ spec:
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["on-demand"]
+        - key: capacity-spread
+          operator: In
+          values:
+          - "1"
         - key: karpenter.k8s.aws/instance-category
           operator: In
           values: ["c", "t"]
@@ -484,11 +529,7 @@ spec:
           values: ["4"]
         - key: node.kubernetes.io/instance-type
           operator: In
-          values: ["c5.large", "c5.xlarge", "c5.2xlarge", "c6g.large", "c6g.xlarge", "c6g.2xlarge", "c7g.large", "c7g.xlarge", "c7g.2xlarge", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge", "t4g.medium", "t4g.large", "t4g.xlarge", "t4g.2xlarge"]
-        - key: capacity-spread
-          operator: In
-          values:
-          - "1"
+          values: ["c6a.xlarge", "c6a.2xlarge","c5a.xlarge", "c5a.2xlarge"]
       nodeClassRef:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
@@ -517,6 +558,10 @@ spec:
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["spot"]
+        - key: capacity-spread
+          operator: In
+          values:
+          - "2"
         - key: karpenter.k8s.aws/instance-category
           operator: In
           values: ["c", "t"]
@@ -525,11 +570,7 @@ spec:
           values: ["4"]
         - key: node.kubernetes.io/instance-type
           operator: In
-          values: ["c5.large", "c5.xlarge", "c5.2xlarge", "c6g.large", "c6g.xlarge", "c6g.2xlarge", "c7g.large", "c7g.xlarge", "c7g.2xlarge", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge", "t4g.medium", "t4g.large", "t4g.xlarge", "t4g.2xlarge"]
-        - key: capacity-spread
-          operator: In
-          values:
-          - "2"
+          values: ["c6a.xlarge", "c6a.2xlarge","c5a.xlarge", "c5a.2xlarge"]
       nodeClassRef:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
@@ -541,7 +582,7 @@ spec:
     consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 1m
 ---
-apiVersion: karpenter.k8s.aws/v1beta1
+apiVersion: karpenter.k8s.aws/v1
 kind: EC2NodeClass
 metadata:
   name: default
