@@ -24,7 +24,7 @@ Follow these steps to set up and deploy Karpenter:
   git clone https://github.com/madgicaltechdom/karpenter-resources.git
   ```
 
-2. Create a role with GitHub repo trust relationships. You can refer role/github-access-policy and role/trust-relationships code(don't forget to update placeholders).
+2. Create a role with a trust relationship for the GitHub repository, and add an access entry in EKS for this role. You can refer role/github-access-policy and role/trust-relationships code(don't forget to update placeholders).
 
 3. Create GitHub repository secrets and variables:
 
