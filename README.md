@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This repository contains the resources and scripts required to set up and deploy Karpenter, an open-source Kubernetes node autoscaler. Karpenter automatically adjusts the size of your Kubernetes cluster, ensuring that the right amount of compute capacity is available to meet your application's needs. This setup is optimized for AWS EKS and includes a workflow to automate the deployment process. Also, it features a configuration for a 50/50 split between On-Demand and Spot instances, allowing for both cost efficiency and resource availability.
+This repository contains the resources and scripts required to set up and deploy Karpenter, an open-source Kubernetes node autoscaler. Karpenter automatically adjusts the size of your Kubernetes cluster, ensuring that the right amount of compute capacity is available to meet your application's needs. This setup is optimized for AWS EKS and includes a workflow to automate the deployment process. Also, it features a configuration for a 50/50 split between On-Demand and Spot instances, allowing for both cost efficiency and resource availability. Also, integration with an SQS Queue for managing interruption events, improving reliability during scaling events.
 
 ## Prerequisites
 
@@ -13,6 +13,10 @@ Before you begin, ensure that you have the following prerequisites installed and
 - GitHub Actions Runner: Configured with the necessary permissions to run workflows on your repository.
 - EKS Cluster: An existing EKS cluster where Karpenter will be deployed.
 - Karpenter Image: This image contains the Karpenter binaries(version 1.0.1) and is used to deploy the Karpenter controller in your EKS cluster.
+
+  ```
+  docker pull public.ecr.aws/karpenter/controller:1.0.1
+  ```
 
 ## Steps to Set Up
 
