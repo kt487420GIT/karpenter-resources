@@ -22,9 +22,15 @@ Before you begin, ensure that you have the following prerequisites installed and
 
 Follow these steps to set up and deploy Karpenter:
 
-1. Create a role with GitHub repo trust relationships. You can refer role/github-access-policy and role/trust-relationships code(don't forget to update placeholders).
+1. Clone this repo:
 
-2. Update GitHub repository secrets and variables:
+  ```
+  git clone https://github.com/madgicaltechdom/karpenter-resources.git
+  ```
+
+2. Create a role with a trust relationship for the GitHub repository, and add an access entry in EKS for this role. You can refer role/github-access-policy and role/trust-relationships code(don't forget to update placeholders).
+
+3. Create GitHub repository secrets and variables:
 
    - KARPENTER_ROLE: The ARN of the IAM role that GitHub Actions will assume to access your AWS resources, specifically for the Karpenter setup.
    - AWS_REGION: The AWS region where your EKS cluster is deployed.
@@ -36,10 +42,10 @@ Follow these steps to set up and deploy Karpenter:
    - NODEGROUP_LABEL: The label assigned to the nodes managed by Karpenter, often used for identifying or grouping nodes within the cluster.
    - KARPENTER_IMAGE: The Amazon ECR image for Karpenter. Ensure this setup is for Karpenter version 1.0.1.
 
-3. Configure the GitHub Workflow
+4. Configure the GitHub Workflow
    The repository contains a GitHub Actions workflow (.github/workflows/main.yml) that automates the deployment of Karpenter.
 
-4. Run the Workflow
+5. Run the Workflow
    To deploy Karpenter, manually trigger the GitHub Actions workflow:
 
    - Go to the GitHub Actions tab in your repository.
@@ -47,7 +53,7 @@ Follow these steps to set up and deploy Karpenter:
    - Click on the Run workflow dropdown.
    - Specifying the script name (karpenter-python-script.py) as input, trigger the workflow manually.
 
-5. Verify the Deployment
+6. Verify the Deployment
    Once the workflow completes, verify that Karpenter is installed and running:
 
    ```
@@ -56,7 +62,7 @@ Follow these steps to set up and deploy Karpenter:
 
    Check that the Karpenter pods are running without errors.
 
-6. Testing
+7. Testing
    To verify the functionality of Karpenter and the NodePool, you can deploy a test workload that will trigger the autoscaler:
 
    - Run the following command to create a test deployment with zero replicas:
@@ -65,20 +71,20 @@ Follow these steps to set up and deploy Karpenter:
    kubectl apply -f inflate-deployment.yaml
    ```
 
-7. Scale the deployment to 20 replicas to trigger Karpenter to provision additional nodes:
+8. Scale the deployment to 20 replicas to trigger Karpenter to provision additional nodes:
 
    ```
    kubectl scale deployment inflate --replicas 20
    ```
 
-8. Check the status of the pods and nodes to ensure that the required capacity has been provisioned:
+9. Check the status of the pods and nodes to ensure that the required capacity has been provisioned:
 
    ```
    kubectl get pods
    kubectl get nodes
    ```
 
-9. To monitor Karpenter's activity, check the logs:
+10. To monitor Karpenter's activity, check the logs:
 
    ```
    kubectl logs -f -n <KARPENTER_NAMESPACE> -l app.kubernetes.io/name=karpenter -c controller
