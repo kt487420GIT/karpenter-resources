@@ -1,0 +1,57 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:DescribeStacks",
+        "cloudformation:GetTemplate",
+        "cloudformation:ListStackResources",
+        "cloudformation:GetTemplateSummary"
+      ],
+      "Resource": "arn:aws:cloudformation:*:<ACCOUNT_ID>:stack/<QUEUE_STACK_NAME>/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:AttachRolePolicy",
+        "iam:PassRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRole"
+      ],
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/Karpenter*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "events:PutTargets",
+        "events:PutRule",
+        "events:DescribeRule",
+        "events:DeleteRule",
+        "events:RemoveTargets"
+      ],
+      "Resource": "arn:aws:events:*:<ACCOUNT_ID>:rule/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sqs:CreateQueue",
+        "sqs:DeleteQueue",
+        "sqs:SetQueueAttributes",
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl"
+      ],
+      "Resource": "arn:aws:sqs:*:<ACCOUNT_ID>:*"
+    }
+  ]
+}
