@@ -3,6 +3,7 @@ import subprocess
 import os
 import json
 import yaml
+import sys
 
 def run_command(command):
     try:
@@ -29,47 +30,33 @@ OIDC_ENDPOINT = run_command(f"aws eks describe-cluster --name {CLUSTER_NAME} --q
 AWS_ACCOUNT_ID = run_command("aws sts get-caller-identity --query 'Account' --output text")
 K8S_VERSION = os.environ.get("K8S_VERSION")
 AMD_AMI_ID = os.environ.get("AMD_AMI_ID")
+KARPENTER_ROLE_CLOUDFORMATION_TEMPLATE_PATH = "./karpenter_role_cloudformation.yaml"
 
-# Step 3: Create IAM roles
-node_trust_policy = {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {
-                "Service": "ec2.amazonaws.com"
-            },
-            "Action": "sts:AssumeRole"
-        }
-    ]
-}
-
-iam_client = boto3.client('iam')
-
-role_name = f"KarpenterNodeRole-{CLUSTER_NAME}"
+# Step 1: Deploy the CloudFormation stack for Karpenter IAM roles
 try:
-    iam_client.create_role(
-        RoleName=role_name,
-        AssumeRolePolicyDocument=json.dumps(node_trust_policy)
+    print("Deploying CloudFormation stack for Karpenter IAM roles...")
+    run_command(
+        f"aws cloudformation deploy "
+        f"--stack-name 'Karpenter-{CLUSTER_NAME}' "
+        f"--template-file '{KARPENTER_ROLE_CLOUDFORMATION_TEMPLATE_PATH}' "
+        f"--capabilities CAPABILITY_NAMED_IAM "
+        f"--parameter-overrides ClusterName={CLUSTER_NAME}"
     )
-except iam_client.exceptions.EntityAlreadyExistsException:
-    print(f"Role {role_name} already exists")
+    print("CloudFormation stack deployed successfully.")
+except Exception as e:
+    print(f"Failed to deploy CloudFormation stack: {e}")
+    sys.exit(1)  # Terminate the script if this step fails
 
-# Step 4: Attach policies to the role
-policies = [
-    "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
-    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-]
+# Step 2: Ensure EC2 Spot service-linked role is created
+try:
+    print("Ensuring EC2 Spot service-linked role exists...")
+    run_command("aws iam create-service-linked-role --aws-service-name spot.amazonaws.com || true")
+    print("EC2 Spot service-linked role check completed.")
+except Exception as e:
+    print(f"Failed to create EC2 Spot service-linked role: {e}")
+    sys.exit(1)  # Terminate the script if this step fails
 
-for policy_arn in policies:
-    iam_client.attach_role_policy(
-        RoleName=role_name,
-        PolicyArn=policy_arn
-    )
-
-# Step 5: Create IAM role for Karpenter controller
+# Step 3: Create IAM role for Karpenter controller and add
 controller_trust_policy = {
     "Version": "2012-10-17",
     "Statement": [
@@ -89,6 +76,7 @@ controller_trust_policy = {
     ]
 }
 
+iam_client = boto3.client('iam')
 controller_role_name = f"KarpenterControllerRole-{CLUSTER_NAME}"
 try:
     iam_client.create_role(
@@ -98,136 +86,30 @@ try:
 except iam_client.exceptions.EntityAlreadyExistsException:
     print(f"Role {controller_role_name} already exists")
 
-controller_policy = {
-    "Statement": [
-        {
-            "Action": [
-                "ssm:GetParameter",
-                "ec2:DescribeImages",
-                "ec2:RunInstances",
-                "ec2:DescribeSubnets",
-                "ec2:DescribeSecurityGroups",
-                "ec2:DescribeLaunchTemplates",
-                "ec2:DescribeInstances",
-                "ec2:DescribeInstanceTypes",
-                "ec2:DescribeInstanceTypeOfferings",
-                "ec2:DescribeAvailabilityZones",
-                "ec2:DeleteLaunchTemplate",
-                "ec2:CreateTags",
-                "ec2:CreateLaunchTemplate",
-                "ec2:CreateFleet",
-                "ec2:DescribeSpotPriceHistory",
-                "pricing:GetProducts"
-            ],
-            "Effect": "Allow",
-            "Resource": "*",
-            "Sid": "Karpenter"
-        },
-        {
-            "Action": "ec2:TerminateInstances",
-            "Condition": {
-                "StringLike": {
-                    "ec2:ResourceTag/karpenter.sh/nodepool": "*"
-                }
-            },
-            "Effect": "Allow",
-            "Resource": "*",
-            "Sid": "ConditionalEC2Termination"
-        },
-        {
-            "Effect": "Allow",
-            "Action": "iam:PassRole",
-            "Resource": f"arn:{AWS_PARTITION}:iam::{AWS_ACCOUNT_ID}:role/KarpenterNodeRole-{CLUSTER_NAME}",
-            "Sid": "PassNodeIAMRole"
-        },
-        {
-            "Effect": "Allow",
-            "Action": "eks:DescribeCluster",
-            "Resource": f"arn:{AWS_PARTITION}:eks:{AWS_REGION}:{AWS_ACCOUNT_ID}:cluster/{CLUSTER_NAME}",
-            "Sid": "EKSClusterEndpointLookup"
-        },
-        {
-            "Sid": "AllowScopedInstanceProfileCreationActions",
-            "Effect": "Allow",
-            "Resource": "*",
-            "Action": ["iam:CreateInstanceProfile"],
-            "Condition": {
-                "StringEquals": {
-                    f"aws:RequestTag/kubernetes.io/cluster/{CLUSTER_NAME}": "owned",
-                    f"aws:RequestTag/topology.kubernetes.io/region": AWS_REGION
-                },
-                "StringLike": {
-                    "aws:RequestTag/karpenter.k8s.aws/ec2nodeclass": "*"
-                }
-            }
-        },
-        {
-            "Sid": "AllowScopedInstanceProfileTagActions",
-            "Effect": "Allow",
-            "Resource": "*",
-            "Action": ["iam:TagInstanceProfile"],
-            "Condition": {
-                "StringEquals": {
-                    f"aws:ResourceTag/kubernetes.io/cluster/{CLUSTER_NAME}": "owned",
-                    f"aws:ResourceTag/topology.kubernetes.io/region": AWS_REGION,
-                    f"aws:RequestTag/kubernetes.io/cluster/{CLUSTER_NAME}": "owned",
-                    f"aws:RequestTag/topology.kubernetes.io/region": AWS_REGION
-                },
-                "StringLike": {
-                    "aws:ResourceTag/karpenter.k8s.aws/ec2nodeclass": "*",
-                    "aws:RequestTag/karpenter.k8s.aws/ec2nodeclass": "*"
-                }
-            }
-        },
-        {
-            "Sid": "AllowScopedInstanceProfileActions",
-            "Effect": "Allow",
-            "Resource": "*",
-            "Action": [
-                "iam:AddRoleToInstanceProfile",
-                "iam:RemoveRoleFromInstanceProfile",
-                "iam:DeleteInstanceProfile"
-            ],
-            "Condition": {
-                "StringEquals": {
-                    f"aws:ResourceTag/kubernetes.io/cluster/{CLUSTER_NAME}": "owned",
-                    f"aws:ResourceTag/topology.kubernetes.io/region": AWS_REGION
-                },
-                "StringLike": {
-                    "aws:ResourceTag/karpenter.k8s.aws/ec2nodeclass": "*"
-                }
-            }
-        },
-        {
-            "Sid": "AllowInstanceProfileReadActions",
-            "Effect": "Allow",
-            "Resource": "*",
-            "Action": "iam:GetInstanceProfile"
-        }
-    ],
-    "Version": "2012-10-17"
-}
+try:
+    iam_client.attach_role_policy(
+        RoleName=controller_role_name,
+        PolicyArn=f"arn:{AWS_PARTITION}:iam::{AWS_ACCOUNT_ID}:policy/KarpenterControllerPolicy-{CLUSTER_NAME}"
+    )
+    print(f"Policy KarpenterControllerPolicy-{CLUSTER_NAME} attached to {controller_role_name}.")
+except Exception as e:
+    print(f"Error attaching policy to role: {str(e)}")
+# Step 4 and 5 are removed
 
-iam_client.put_role_policy(
-    RoleName=controller_role_name,
-    PolicyName=f"KarpenterControllerPolicy-{CLUSTER_NAME}",
-    PolicyDocument=json.dumps(controller_policy)
-)
+# Step 6a: Select NG, get subnetes automatically and add tags to subnetes 
+nodegroups = run_command(f"aws eks list-nodegroups --cluster-name {CLUSTER_NAME} --query 'nodegroups' --output text").split()
 
-# # Step 6a: Select NG, get subnetes automatically and add tags to subnetes 
-# nodegroups = run_command(f"aws eks list-nodegroups --cluster-name {CLUSTER_NAME} --query 'nodegroups' --output text").split()
-
-# for nodegroup in nodegroups:
-#     subnets = run_command(f"aws eks describe-nodegroup --cluster-name {CLUSTER_NAME} --nodegroup-name {nodegroup} --query 'nodegroup.subnets' --output text").split()
-#     for subnet in subnets:
-#         run_command(f"aws ec2 create-tags --tags 'Key=karpenter.sh/discovery,Value={CLUSTER_NAME}' --resources {subnet}")
+for nodegroup in nodegroups:
+    subnets = run_command(f"aws eks describe-nodegroup --cluster-name {CLUSTER_NAME} --nodegroup-name {nodegroup} --query 'nodegroup.subnets' --output text").split()
+    for subnet in subnets:
+        run_command(f"aws ec2 create-tags --tags 'Key=karpenter.sh/discovery,Value={CLUSTER_NAME}' --resources {subnet}")
 
 # Step 6b: Define your subnets manually (list of subnet IDs)
-subnets = [
-    "subnet-0632df4f63bd04b34",
-    "subnet-01abf3394bd1d80a8",
-    "subnet-09344001e5499b75e"
-]
+#subnets = [
+#    "subnet-0632df4f63bd04b34",
+#    "subnet-01abf3394bd1d80a8",
+#    "subnet-09344001e5499b75e"
+#]
 
 # Loop through each subnet and add the necessary tags
 for subnet in subnets:
@@ -360,6 +242,7 @@ command = (
     f"--set \"settings.clusterName={CLUSTER_NAME}\" "
     f"--set settings.isolatedVPC=true "
     f"--set \"serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=arn:{AWS_PARTITION}:iam::{AWS_ACCOUNT_ID}:role/KarpenterControllerRole-{CLUSTER_NAME}\" "
+    f"--set \"settings.interruptionQueue={CLUSTER_NAME}\" "
     f"--set controller.resources.requests.cpu=1 "
     f"--set controller.resources.requests.memory=1Gi "
     f"--set controller.resources.limits.cpu=1 "
@@ -449,6 +332,8 @@ def update_karpenter_image(file_path, new_image):
                 containers = doc['spec']['template']['spec'].get('containers', [])
                 for container in containers:
                     if container.get('name') == 'controller':
+                        old_image = container.get('image')
+                        print(f"Old image: {old_image}")
                         container['image'] = new_image
                         print(f"Updated image to {new_image} in {file_path}")
                         break
@@ -472,24 +357,24 @@ KARPENTER_CRD_DIR = "karpenter/crds"
 
 # Apply CRDs from the local directory
 
-# Create CRD for karpenter.sh_nodepools.yaml
+# Apply CRD for karpenter.sh_nodepools.yaml
 try:
-    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodepools.yaml\"")
-    print("CRD karpenter.sh_nodepools.yaml created successfully.")
+    run_command(f"kubectl apply -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodepools.yaml\"")
+    print("CRD karpenter.sh_nodepools.yaml applied successfully.")
 except Exception as e:
     print(f"Error applying CRD karpenter.sh_nodepools.yaml: {str(e)}")
 
-# Create CRD for karpenter.k8s.aws_ec2nodeclasses.yaml
+# Apply CRD for karpenter.k8s.aws_ec2nodeclasses.yaml
 try:
-    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.k8s.aws_ec2nodeclasses.yaml\"")
-    print("CRD karpenter.k8s.aws_ec2nodeclasses.yaml created successfully.")
+    run_command(f"kubectl apply -f \"{KARPENTER_CRD_DIR}/karpenter.k8s.aws_ec2nodeclasses.yaml\"")
+    print("CRD karpenter.k8s.aws_ec2nodeclasses.yaml applied successfully.")
 except Exception as e:
     print(f"Error applying CRD karpenter.k8s.aws_ec2nodeclasses.yaml: {str(e)}")
 
-# Create CRD for karpenter.sh_nodeclaims.yaml
+# Apply CRD for karpenter.sh_nodeclaims.yaml
 try:
-    run_command(f"kubectl create -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodeclaims.yaml\"")
-    print("CRD karpenter.sh_nodeclaims.yaml created successfully.")
+    run_command(f"kubectl apply -f \"{KARPENTER_CRD_DIR}/karpenter.sh_nodeclaims.yaml\"")
+    print("CRD karpenter.sh_nodeclaims.yaml applied successfully.")
 except Exception as e:
     print(f"Error applying CRD karpenter.sh_nodeclaims.yaml: {str(e)}")
 
@@ -523,13 +408,13 @@ spec:
           - "1"
         - key: karpenter.k8s.aws/instance-category
           operator: In
-          values: ["c", "t"]
+          values: ["c", "m", "r"]
         - key: karpenter.k8s.aws/instance-generation
           operator: Gt
           values: ["4"]
-        - key: node.kubernetes.io/instance-type
+        - key: node.kubernetes.io/instance-size
           operator: In
-          values: ["c6a.xlarge", "c6a.2xlarge","c5a.xlarge", "c5a.2xlarge"]
+          values: ["xlarge","2xlarge","4xlarge","8xlarge"]
       nodeClassRef:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
@@ -564,13 +449,13 @@ spec:
           - "2"
         - key: karpenter.k8s.aws/instance-category
           operator: In
-          values: ["c", "t"]
+          values: ["c", "m", "r"]
         - key: karpenter.k8s.aws/instance-generation
           operator: Gt
           values: ["4"]
-        - key: node.kubernetes.io/instance-type
+        - key: node.kubernetes.io/instance-size
           operator: In
-          values: ["c6a.xlarge", "c6a.2xlarge","c5a.xlarge", "c5a.2xlarge"]
+          values: ["xlarge","2xlarge","4xlarge","8xlarge"]
       nodeClassRef:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
