@@ -27,9 +27,17 @@
         "iam:PutRolePolicy",
         "iam:DeleteRolePolicy",
         "iam:DetachRolePolicy",
-        "iam:DeleteRole"
+        "iam:DeleteRole",
+        "iam:GetRole"
       ],
       "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/Karpenter*"
+    },
+    {
+        "Effect": "Allow",
+        "Action": "iam:CreatePolicy",
+        "Resource": [
+            "arn:aws:iam::<ACCOUNT_ID>:policy/KarpenterControllerPolicy-<CLUSTER_NAME>"
+        ]
     },
     {
       "Effect": "Allow",
