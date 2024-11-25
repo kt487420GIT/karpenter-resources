@@ -412,7 +412,7 @@ spec:
         - key: karpenter.k8s.aws/instance-generation
           operator: Gt
           values: ["4"]
-        - key: node.kubernetes.io/instance-size
+        - key: karpenter.k8s.aws/instance-size
           operator: In
           values: ["xlarge","2xlarge","4xlarge","8xlarge"]
       nodeClassRef:
@@ -453,7 +453,7 @@ spec:
         - key: karpenter.k8s.aws/instance-generation
           operator: Gt
           values: ["4"]
-        - key: node.kubernetes.io/instance-size
+        - key: karpenter.k8s.aws/instance-size
           operator: In
           values: ["xlarge","2xlarge","4xlarge","8xlarge"]
       nodeClassRef:
