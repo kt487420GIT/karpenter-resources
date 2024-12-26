@@ -18,7 +18,7 @@ Before you begin, ensure that you have the following prerequisites installed and
   docker pull public.ecr.aws/karpenter/controller:1.0.1
   ```
 
-## Steps to Set Up
+## Steps to Set Up 
 
 Follow these steps to set up and deploy Karpenter:
 
